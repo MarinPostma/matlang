@@ -1,5 +1,7 @@
 (ns matlang.core
-  (:require [instaparse.core :as insta] [rhizome.viz])
+  (:require [instaparse.core :as insta]
+            [rhizome.viz]
+            [clojure.core.match :refer [match]])
   (:gen-class))
 
 (def parser
@@ -44,22 +46,59 @@
 (defn make-matrix [& args]
   (let [mat (map :_ret args)
         rows (count mat)
-        cols (if (> 0 rows) (count (first mat)) 0)]
+        cols (if (> rows 0) (count (first mat)) 0)]
     (do
-      (assert (every? #((= (count %) cols)) mat) "invalid matrix size"))
+      (assert (every? #(= (count %) cols) mat) "invalid matrix size"))
     (assoc (apply merge args) :_ret {:type :matrix
-                                     :shape (list rows cols)
-                                     :mat mat})))
+                                     :val {:shape (list rows cols)
+                                           :mat (map #(map :val %) mat)}})))
+
+(defn make-number [env n] (assoc env :_ret {:type :scalar :val (Integer/parseInt n)}))
+
+(defn make-type-lhs-rhs [f t]
+  (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}]
+    (assoc
+     (merge env1 env2)
+     :_ret (assoc
+            {}
+            :type t
+            :val (f (:val lhs) (:val rhs))))))
+
+(defn ms-add [matrix scalar]
+  {:shape (:shape matrix)
+   :mat (map #(map (partial + scalar) %) (:mat matrix))})
+
+(defn mm-add [m1 m2]
+  (do
+    (assert (= (:shape m1) (:shape m2)) "shapes must  be equal for matrix addition")
+    {:shape (:shape m1)
+     :mat (map #(doall
+                 (map + (first %) (second %)))
+               (map vector (:mat m1) (:mat m2)))}))
+
+(def add-dispatch {:ss (make-type-lhs-rhs + :scalar)
+                   :ms (make-type-lhs-rhs ms-add :matrix)
+                   ;swapping arguments here
+                   :sm #((make-type-lhs-rhs ms-add :matrix) %2 %1)
+                   :mm (make-type-lhs-rhs mm-add :matrix)})
+
+(defn op-dispatch [fs]
+  (fn [lhs rhs]
+    (match [((comp :type :_ret) lhs) ((comp :type :_ret) rhs)]
+      [:scalar :scalar] ((:ss fs) lhs rhs)
+      [:matrix :scalar] ((:ms fs) lhs rhs)
+      [:scalar :matrix] ((:sm fs) lhs rhs)
+      [:matrix :matrix] ((:mm fs) lhs rhs))))
 
 (defn make-lang0-instr-interpreting [env]
   {:assig (fn [{varname :_ret :as env1} {value :_ret :as env2}] (assoc (merge env1 env2) varname value :_ret value))
-   :add (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (+ lhs rhs)))
+   :add (op-dispatch add-dispatch)
    :sub (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (- lhs rhs)))
    :mult (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (* lhs rhs)))
    :div (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (/ lhs rhs)))
    :mat make-matrix
    :_vec (fn [& elems] (assoc (apply merge elems) :_ret (map :_ret elems)))
-   :number #(assoc env :_ret (Integer/parseInt %))
+   :number #(make-number env %)
    :varname #(assoc env :_ret (keyword %))
    :mod (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (rem lhs rhs)))
    :argument #(assoc env :_ret (keyword (str "%" %)))
@@ -67,7 +106,7 @@
 
 (def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
 
-(def prg "vec = [ 1 1 4  12   3; 13 11];")
+(def prg "[1 1 1 1; 1 1 1 1] + [1 2 3 4; 5 6 7 8];")
 
 (def const-eval-test (->> prg parser interpreter))
 
