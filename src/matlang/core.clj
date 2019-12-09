@@ -18,9 +18,10 @@
    div = mult-div spaces <'/'> spaces factor
    mod = mult-div spaces <'%'> spaces factor
    <factor> = number | <'('> expr <')'> | varget | assig | mat
-   mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'>
+   mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'> | transp
    _vec = (spaces number <#'\\s'> spaces)* (number)?
    <spaces> = <#'\\s*'>
+   transp = (mat | varget) <'\\''>
    number = #'-?[0-9]+'
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
@@ -64,23 +65,46 @@
             :type t
             :val (f (:val lhs) (:val rhs))))))
 
-(defn ms-add [matrix scalar]
-  {:shape (:shape matrix)
-   :mat (map #(map (partial + scalar) %) (:mat matrix))})
+(defn ms-op [f]
+  (fn [matrix scalar]
+    {:shape (:shape matrix)
+     :mat (map #(map (partial f scalar) %) (:mat matrix))}))
 
-(defn mm-add [m1 m2]
-  (do
-    (assert (= (:shape m1) (:shape m2)) "shapes must  be equal for matrix addition")
-    {:shape (:shape m1)
-     :mat (map #(doall
-                 (map + (first %) (second %)))
-               (map vector (:mat m1) (:mat m2)))}))
+(defn mm-op [f]
+  (fn [m1 m2]
+    (do
+      (assert (= (:shape m1) (:shape m2)) "shapes must  be equal for matrix addition")
+      {:shape (:shape m1)
+       :mat (map #(doall
+                   (map f (first %) (second %)))
+                 (map vector (:mat m1) (:mat m2)))})))
 
 (def add-dispatch {:ss (make-type-lhs-rhs + :scalar)
-                   :ms (make-type-lhs-rhs ms-add :matrix)
+                   :ms (make-type-lhs-rhs (ms-op +) :matrix)
                    ;swapping arguments here
-                   :sm #((make-type-lhs-rhs ms-add :matrix) %2 %1)
-                   :mm (make-type-lhs-rhs mm-add :matrix)})
+                   :sm #((make-type-lhs-rhs (ms-op +) :matrix) %2 %1)
+                   :mm (make-type-lhs-rhs (mm-op +) :matrix)})
+
+(def sub-dispatch {:ss (make-type-lhs-rhs - :scalar)
+                   :ms (make-type-lhs-rhs (ms-op -) :matrix)
+                   ;broadcasting here is weird
+                   ;:sm #((make-type-lhs-rhs (ms-op -) :matrix) %2 %1)
+                   :sm (fn [& _] (assert false "broadcasting not working"))
+                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
+
+(def mul-dispatch {:ss (make-type-lhs-rhs * :scalar)
+                   :ms (make-type-lhs-rhs (ms-op *) :matrix)
+                   :sm #((make-type-lhs-rhs (ms-op *) :matrix) %2 %1)
+                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
+
+(defn transpose [mat]
+  (do
+    (println mat)
+    (assert (= (:type mat) :matrix) "Only matrix can be transposed")
+    (let [{shape :shape mat :mat} (:val mat)]
+      {:type :matrix
+       :val {:shape `((second shape) (first shape))
+             :mat (apply map vector mat)}})))
 
 (defn op-dispatch [fs]
   (fn [lhs rhs]
@@ -93,8 +117,8 @@
 (defn make-lang0-instr-interpreting [env]
   {:assig (fn [{varname :_ret :as env1} {value :_ret :as env2}] (assoc (merge env1 env2) varname value :_ret value))
    :add (op-dispatch add-dispatch)
-   :sub (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (- lhs rhs)))
-   :mult (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (* lhs rhs)))
+   :sub (op-dispatch sub-dispatch)
+   :mult (op-dispatch mul-dispatch)
    :div (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (/ lhs rhs)))
    :mat make-matrix
    :_vec (fn [& elems] (assoc (apply merge elems) :_ret (map :_ret elems)))
@@ -102,13 +126,20 @@
    :varname #(assoc env :_ret (keyword %))
    :mod (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (rem lhs rhs)))
    :argument #(assoc env :_ret (keyword (str "%" %)))
+   :transp #(assoc env :_ret (transpose (:_ret %)))
    :varget (fn [{varname :_ret :as env1}] (assoc env1 :_ret (varname env1)))})
 
 (def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
 
-(def prg "[1 1 1 1; 1 1 1 1] + [1 2 3 4; 5 6 7 8];")
+(def prg "[1 1]';")
 
-(def const-eval-test (->> prg parser interpreter))
+(defn _print [ret]
+  (match [(:type ret)]
+    [:scalar] (:val ret)
+    [:matrix] ((comp :mat :val) ret)
+    :else (println "undefined return type" ret)))
+
+(def evaluator (->> prg parser interpreter))
 
 ;(insta/visualize (parser prg))
-(const-eval-test 2 3)
+(evaluator 1 2)
