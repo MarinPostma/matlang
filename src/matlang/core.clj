@@ -8,7 +8,7 @@
   (insta/parser
    "
    prog = (spaces expr spaces <';'> spaces)*
-   <expr> = assig | add-sub
+   <expr> = assig | add-sub | block
    assig = varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
@@ -18,13 +18,15 @@
    div = mult-div spaces <'/'> spaces factor
    mod = mult-div spaces <'%'> spaces factor
    <factor> = number | <'('> expr <')'> | varget | assig | mat
-   mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'> | transp
+   <mat> = _mat | transp
+   _mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'>
    _vec = (spaces number <#'\\s'> spaces)* (number)?
    <spaces> = <#'\\s*'>
    transp = (mat | varget) <'\\''>
    number = #'-?[0-9]+'
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
+   block = <'{'>(spaces expr spaces <';'> spaces)*<'}'>
    argument = <'%'>#'[0-9]+'"))
 ;(insta/visualize (const-parser "-123"))
 ;(prn (const-parser "   -123    "))
@@ -49,6 +51,7 @@
         rows (count mat)
         cols (if (> rows 0) (count (first mat)) 0)]
     (do
+      (println "this is args" args)
       (assert (every? #(= (count %) cols) mat) "invalid matrix size"))
     (assoc (apply merge args) :_ret {:type :matrix
                                      :val {:shape (list rows cols)
@@ -99,11 +102,11 @@
 
 (defn transpose [mat]
   (do
-    (println mat)
+    (println "this is the mat" mat)
     (assert (= (:type mat) :matrix) "Only matrix can be transposed")
     (let [{shape :shape mat :mat} (:val mat)]
       {:type :matrix
-       :val {:shape `((second shape) (first shape))
+       :val {:shape (list (second shape) (first shape))
              :mat (apply map vector mat)}})))
 
 (defn op-dispatch [fs]
@@ -120,7 +123,7 @@
    :sub (op-dispatch sub-dispatch)
    :mult (op-dispatch mul-dispatch)
    :div (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (/ lhs rhs)))
-   :mat make-matrix
+   :_mat make-matrix
    :_vec (fn [& elems] (assoc (apply merge elems) :_ret (map :_ret elems)))
    :number #(make-number env %)
    :varname #(assoc env :_ret (keyword %))
@@ -131,7 +134,7 @@
 
 (def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
 
-(def prg "[1 1]';")
+(def prg "12 + 12;")
 
 (defn _print [ret]
   (match [(:type ret)]
@@ -142,4 +145,4 @@
 (def evaluator (->> prg parser interpreter))
 
 ;(insta/visualize (parser prg))
-(evaluator 1 2)
+(evaluator 1 7)
