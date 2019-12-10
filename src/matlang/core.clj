@@ -7,8 +7,10 @@
 (def parser
   (insta/parser
    "
-   prog = (spaces expr spaces <';'> spaces)*
-   <expr> = assig | add-sub | block
+   prog = (spaces form spaces)*
+   <form> = (block | control_flow | ( expr spaces <';'> ))
+   <expr> = assig | add-sub
+   <control_flow> = if_statement
    assig = varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
@@ -26,7 +28,8 @@
    number = #'-?[0-9]+'
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
-   block = <'{'>(spaces expr spaces <';'> spaces)*<'}'>
+   block = <'{'>(spaces form spaces)*<'}'>
+   if_statement = <#'if '> spaces expr spaces block (spaces <#'else'> spaces block)?
    argument = <'%'>#'[0-9]+'"))
 ;(insta/visualize (const-parser "-123"))
 ;(prn (const-parser "   -123    "))
@@ -51,7 +54,6 @@
         rows (count mat)
         cols (if (> rows 0) (count (first mat)) 0)]
     (do
-      (println "this is args" args)
       (assert (every? #(= (count %) cols) mat) "invalid matrix size"))
     (assoc (apply merge args) :_ret {:type :matrix
                                      :val {:shape (list rows cols)
@@ -134,7 +136,7 @@
 
 (def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
 
-(def prg "12 + 12;")
+(def prg "if  1 + 2 {17;}else { if 7 + 1 { 13; }12;}")
 
 (defn _print [ret]
   (match [(:type ret)]
@@ -144,5 +146,5 @@
 
 (def evaluator (->> prg parser interpreter))
 
-;(insta/visualize (parser prg))
-(evaluator 1 7)
+(insta/visualize (parser prg))
+;(evaluator 1 7)
