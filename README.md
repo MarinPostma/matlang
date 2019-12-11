@@ -1,34 +1,54 @@
 # matlang
 
-a toy programmign anguage for matrix for linear algebra
+a toy programming language for linear algebra
 
-## Usage
+## guide
 
- //TODO
+### Types
 
-## Examples
+there are 4 types:
 
-...
+* integers
+* floats (not yet supported)
+* matrices
+* booleans
 
-### Bugs
+The typing of matlang is static and infered at compile time.
 
-...
+### Variable declaration
 
-### Any Other Sections
-### That You Think
-### Might be Useful
+The following syntax allows you to declare a variable:
 
-## License
+```
+;;decalare an int
+let my_var = 12;
 
-Copyright © 2019 Marin Postma
+;; declare a matrix :
+;; 1 2
+;; 3 4
 
-This program and the accompanying materials are made available under the
-terms of the Eclipse Public License 2.0 which is available at
-http://www.eclipse.org/legal/epl-2.0.
+let my_mat = [1 2; 3 4];
+```
 
-This Source Code may also be made available under the following Secondary
-Licenses when the conditions for such availability set forth in the Eclipse
-Public License, v. 2.0 are satisfied: GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or (at your
-option) any later version, with the GNU Classpath Exception which is available
-at https://www.gnu.org/software/classpath/license.html.
+
+### Control flow
+
+```
+if 12 = 17 {
+	;; do something
+} else {
+;; the else close is optional.
+	;; do something else
+}
+```
+
+### loops
+
+matlang only supports for while loops:
+
+```
+while true {
+	;; do something
+}
+```
+
