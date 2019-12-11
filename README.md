@@ -21,7 +21,7 @@ The following syntax allows you to declare a variable:
 
 ```
 ;;decalare an int
-let my_var = 12;
+my_var = 12;
 
 ;; declare a matrix :
 ;; 1 2
@@ -34,7 +34,7 @@ let my_mat = [1 2; 3 4];
 ### Control flow
 
 ```
-if 12 = 17 {
+if 12 == 17 {
 	;; do something
 } else {
 ;; the else close is optional.
