@@ -52,3 +52,10 @@ while true {
 }
 ```
 
+## Roadmap
+[x] if-else
+[x] while
+[ ] functions (first order)
+[ ] strings
+[ ] sys-calls (write, read, open)
+[ ] mini stdlib
