@@ -9,9 +9,9 @@
    "
    prog = (spaces form spaces)*
    <form> = (block | control_flow | ( expr spaces <';'> ))
-   <expr> = assig | add-sub | boolean
+   <expr> = assig | add-sub | logical_statement
    <control_flow> = if_statement | while_statement
-   assig = <#'let '> spaces varname spaces <'='> spaces expr
+   assig = spaces varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
    add = add-sub spaces <'+'> spaces mult-div
@@ -32,7 +32,7 @@
    if_statement = <#'if '> spaces logical_statement spaces block (spaces <#'else'> spaces block)?
    while_statement = <#'while '> spaces logical_statement spaces block
    <boolean> = true | false
-   <logical_statement> = more_than | less_than | equal | more_equal | less_equal | true | false
+   <logical_statement> = more_than | less_than | equal | more_equal | less_equal | boolean
     more_than = expr spaces <'>'> spaces expr
     less_than = expr spaces <'<'> spaces expr
     equal = expr spaces <'=='> spaces expr
@@ -110,16 +110,11 @@
       [:scalar :matrix] ((:sm fs) lhs rhs)
       [:matrix :matrix] ((:mm fs) lhs rhs))))
 
-(def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
-
 (defn apply-op
   "applies `op` the args (isn the fort [lhs rhs]) and return the resulting environement"
   [env op args]
-  (let [[lhs rhs] (map (partial execute env) args)]
+  (let [[lhs rhs] (map (partial evaluate env) args)]
     (op lhs rhs)))
-
-(defn assig
-  [env])
 
 (def add-dispatch {:ss (make-type-lhs-rhs + :scalar)
                    :ms (make-type-lhs-rhs (ms-op +) :matrix)
@@ -160,31 +155,48 @@
       [:scalar :matrix] ((:sm fs) lhs rhs)
       [:matrix :matrix] ((:mm fs) lhs rhs))))
 
-(defn execute [env ast]
-  (match [(first ast)]
-    [:prog] (reduce execute env (rest ast))
-    ; block have internal scoping, when merging their environement, only the values
-    ; of the parent env should be updated the other can be discarded...
-    ; also a block should not return value
-    [:block] (merge env (select-keys (assoc (reduce execute env (rest ast)) :_ret nil) (keys env)))
-    [:assig] (let [[{varname :_ret :as env1} {value :_ret :as env2}] (map (partial execute env) (rest ast))] (assoc (merge env1 env2) varname value :_ret value))
-    [:varget] (let [{varname :_ret :as env1} (execute env (second ast))] (assoc env1 :_ret varname))
-    ; operations
-    [:add] (apply-op env (op-dispatch add-dispatch) (rest ast))
-    [:sub] (apply-op env (op-dispatch sub-dispatch) (rest ast))
-    [:mult] (apply-op env (op-dispatch mul-dispatch) (rest ast))
-    [:div] (apply-op env (op-dispatch div-dispatch) (rest ast))
-    [:mod] (apply-op env (op-dispatch mod-dispatch) (rest ast))
-    [:_mat] (apply make-matrix (map (partial execute env) (rest ast)))
-    [:_vec] (let [elems (map (partial execute env) (rest ast))] (assoc (apply merge elems) :_ret (map :_ret elems)))
-    ; straightforward parsing
-    [:number] (assoc env :_ret {:type :scalar :val (Integer/parseInt (second ast))})
-    [:varname] (assoc env :_ret (keyword (second ast)))
-    :else (println "Unknown operation" (first ast))))
+(defn make-if
+  ([env _test block]
+   ; side effects in the test statement affect the outer scope
+   ; if blocks
+   (let [{ret :_ret :as env1} (evaluate env _test)]
+     (if (:val ret) (evaluate env1 block) env1)))
+  ; if else blocks
+  ([env _test if-block else-block]
+   (let [{ret :_ret :as env1} (evaluate env _test)]
+     (if (:val ret) (evaluate env1 if-block) (evaluate env1 else-block)))))
 
-(def prg "let hello = 12; {let toto = 17;}")
+(defn evaluate [env ast]
+  (let [token (first ast) params (rest ast)]
+    (match [token]
+      [:prog] (reduce evaluate env params)
+          ; block have internal scoping, when merging their environement, only the values
+          ; of the parent env should be updated the other can be discarded...
+          ; also a block should not return value
+      [:block] (merge env (select-keys (assoc (reduce evaluate env params) :_ret nil) (keys env)))
+      [:assig] (let [[{varname :_ret :as env1} {value :_ret :as env2}] (map (partial evaluate env) params)] (assoc (merge env1 env2) varname value :_ret value))
+      [:varget] (let [{varname :_ret :as env1} (evaluate env (second ast))] (assoc env1 :_ret varname))
+          ; operations
+      [:add] (apply-op env (op-dispatch add-dispatch) params)
+      [:sub] (apply-op env (op-dispatch sub-dispatch) params)
+      [:mult] (apply-op env (op-dispatch mul-dispatch) params)
+      [:div] (apply-op env (op-dispatch div-dispatch) params)
+      [:mod] (apply-op env (op-dispatch mod-dispatch) params)
+      [:_mat] (apply make-matrix (map (partial evaluate env) params))
+      [:_vec] (let [elems (map (partial evaluate env) params)] (assoc (apply merge elems) :_ret (map :_ret elems)))
+          ; boolean stuff
+      [:equal] (apply-op env (make-type-lhs-rhs = :boolean) params)
+          ; straightforward parsing
+      [:number] (assoc env :_ret {:type :scalar :val (Integer/parseInt (second ast))})
+      [:if_statement] (apply make-if env params)
+      [:varname] (assoc env :_ret (keyword (second ast)))
+      [:true] (assoc env :_ret {:type :boolean :value true})
+      [:false] (assoc env :_ret {:type :boolean :value false})
+      :else (println "Unknown operation" ast))))
+
+(def prg "b = 17; if 12 == 13 {b = 12;} else {b = 31;}")
 
 (def evaluator (->> prg parser interpreter))
 ;((-> prg parser (partial execute {})))
-(execute {} (parser prg))
+(evaluate {} (parser prg))
 ;(evaluator 1 7)
