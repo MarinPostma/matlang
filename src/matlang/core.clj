@@ -9,9 +9,9 @@
    "
    prog = (spaces form spaces)*
    <form> = (block | control_flow | ( expr spaces <';'> ))
-   <expr> = assig | add-sub
-   <control_flow> = if_statement
-   assig = varname spaces <'='> spaces expr
+   <expr> = assig | add-sub | boolean
+   <control_flow> = if_statement | while_statement
+   assig = <#'let '> spaces varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
    add = add-sub spaces <'+'> spaces mult-div
@@ -29,7 +29,17 @@
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
    block = <'{'>(spaces form spaces)*<'}'>
-   if_statement = <#'if '> spaces expr spaces block (spaces <#'else'> spaces block)?
+   if_statement = <#'if '> spaces logical_statement spaces block (spaces <#'else'> spaces block)?
+   while_statement = <#'while '> spaces logical_statement spaces block
+   <boolean> = true | false
+   <logical_statement> = more_than | less_than | equal | more_equal | less_equal | true | false
+    more_than = expr spaces <'>'> spaces expr
+    less_than = expr spaces <'<'> spaces expr
+    equal = expr spaces <'=='> spaces expr
+    less_equal = expr spaces <'<='> spaces expr
+    more_equal = expr spaces <'>='> spaces expr
+   true = <#'true'>
+   false = <#'false'>
    argument = <'%'>#'[0-9]+'"))
 ;(insta/visualize (const-parser "-123"))
 ;(prn (const-parser "   -123    "))
@@ -129,6 +139,11 @@
    :_vec (fn [& elems] (assoc (apply merge elems) :_ret (map :_ret elems)))
    :number #(make-number env %)
    :varname #(assoc env :_ret (keyword %))
+   :equal #(assoc env :_ret {:type :boolean :value (= %1 %2)})
+   :less_than #(assoc env :_ret {:type :boolean :value (< %1 %2)})
+   :more_than #(assoc env :_ret {:type :boolean :value (> %1 %2)})
+   :more_equal #(assoc env :_ret {:type :boolean :value (>= %1 %2)})
+   :less_equal #(assoc env :_ret {:type :boolean :value (<= %1 %2)})
    :mod (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (rem lhs rhs)))
    :argument #(assoc env :_ret (keyword (str "%" %)))
    :transp #(assoc env :_ret (transpose (:_ret %)))
@@ -136,7 +151,11 @@
 
 (def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
 
-(def prg "if  1 + 2 {17;}else { if 7 + 1 { 13; }12;}")
+(def prg "let hello = true;
+         if true {
+         12 + 3;
+         hello;
+         }")
 
 (defn _print [ret]
   (match [(:type ret)]
