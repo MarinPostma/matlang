@@ -166,6 +166,14 @@
    (let [{ret :_ret :as env1} (evaluate env _test)]
      (if (:val ret) (evaluate env1 if-block) (evaluate env1 else-block)))))
 
+(defn make-while
+  [env _test block]
+  (loop [{t :_ret :as env1} (evaluate env _test)]
+    (if (:val t)
+      (let [nenv (evaluate env1 block)]
+        (recur (evaluate nenv _test)))
+      env1)))
+
 (defn evaluate [env ast]
   (let [token (first ast) params (rest ast)]
     (match [token]
@@ -175,7 +183,7 @@
           ; also a block should not return value
       [:block] (merge env (select-keys (assoc (reduce evaluate env params) :_ret nil) (keys env)))
       [:assig] (let [[{varname :_ret :as env1} {value :_ret :as env2}] (map (partial evaluate env) params)] (assoc (merge env1 env2) varname value :_ret value))
-      [:varget] (let [{varname :_ret :as env1} (evaluate env (second ast))] (assoc env1 :_ret varname))
+      [:varget] (let [{varname :_ret :as env1} (evaluate env (second ast))] (assoc env1 :_ret ((keyword varname) env1)))
           ; operations
       [:add] (apply-op env (op-dispatch add-dispatch) params)
       [:sub] (apply-op env (op-dispatch sub-dispatch) params)
@@ -186,15 +194,20 @@
       [:_vec] (let [elems (map (partial evaluate env) params)] (assoc (apply merge elems) :_ret (map :_ret elems)))
           ; boolean stuff
       [:equal] (apply-op env (make-type-lhs-rhs = :boolean) params)
+      [:less_than] (apply-op env (make-type-lhs-rhs < :boolean) params)
+      [:more_than] (apply-op env (make-type-lhs-rhs > :boolean) params)
+      [:less_equal] (apply-op env (make-type-lhs-rhs <= :boolean) params)
+      [:more_equal] (apply-op env (make-type-lhs-rhs >= :boolean) params)
           ; straightforward parsing
       [:number] (assoc env :_ret {:type :scalar :val (Integer/parseInt (second ast))})
       [:if_statement] (apply make-if env params)
+      [:while_statement] (apply make-while env params)
       [:varname] (assoc env :_ret (keyword (second ast)))
       [:true] (assoc env :_ret {:type :boolean :value true})
       [:false] (assoc env :_ret {:type :boolean :value false})
-      :else (println "Unknown operation" ast))))
+      :else (println "syntax error: " ast))))
 
-(def prg "b = 17; if 12 == 13 {b = 12;} else {b = 31;}")
+(def prg "a = 12; b = 0; while a > 0 {a = a - 1; b = b + 2;}")
 
 (def evaluator (->> prg parser interpreter))
 ;((-> prg parser (partial execute {})))
