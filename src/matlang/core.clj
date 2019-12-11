@@ -64,12 +64,11 @@
         rows (count mat)
         cols (if (> rows 0) (count (first mat)) 0)]
     (do
+      (println args)
       (assert (every? #(= (count %) cols) mat) "invalid matrix size"))
     (assoc (apply merge args) :_ret {:type :matrix
                                      :val {:shape (list rows cols)
                                            :mat (map #(map :val %) mat)}})))
-
-(defn make-number [env n] (assoc env :_ret {:type :scalar :val (Integer/parseInt n)}))
 
 (defn make-type-lhs-rhs [f t]
   (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}]
@@ -94,24 +93,6 @@
                    (map f (first %) (second %)))
                  (map vector (:mat m1) (:mat m2)))})))
 
-(def add-dispatch {:ss (make-type-lhs-rhs + :scalar)
-                   :ms (make-type-lhs-rhs (ms-op +) :matrix)
-                   ;swapping arguments here
-                   :sm #((make-type-lhs-rhs (ms-op +) :matrix) %2 %1)
-                   :mm (make-type-lhs-rhs (mm-op +) :matrix)})
-
-(def sub-dispatch {:ss (make-type-lhs-rhs - :scalar)
-                   :ms (make-type-lhs-rhs (ms-op -) :matrix)
-                   ;broadcasting here is weird
-                   ;:sm #((make-type-lhs-rhs (ms-op -) :matrix) %2 %1)
-                   :sm (fn [& _] (assert false "broadcasting not working"))
-                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
-
-(def mul-dispatch {:ss (make-type-lhs-rhs * :scalar)
-                   :ms (make-type-lhs-rhs (ms-op *) :matrix)
-                   :sm #((make-type-lhs-rhs (ms-op *) :matrix) %2 %1)
-                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
-
 (defn transpose [mat]
   (do
     (println "this is the mat" mat)
@@ -129,41 +110,81 @@
       [:scalar :matrix] ((:sm fs) lhs rhs)
       [:matrix :matrix] ((:mm fs) lhs rhs))))
 
-(defn make-lang0-instr-interpreting [env]
-  {:assig (fn [{varname :_ret :as env1} {value :_ret :as env2}] (assoc (merge env1 env2) varname value :_ret value))
-   :add (op-dispatch add-dispatch)
-   :sub (op-dispatch sub-dispatch)
-   :mult (op-dispatch mul-dispatch)
-   :div (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (/ lhs rhs)))
-   :_mat make-matrix
-   :_vec (fn [& elems] (assoc (apply merge elems) :_ret (map :_ret elems)))
-   :number #(make-number env %)
-   :varname #(assoc env :_ret (keyword %))
-   :equal #(assoc env :_ret {:type :boolean :value (= %1 %2)})
-   :less_than #(assoc env :_ret {:type :boolean :value (< %1 %2)})
-   :more_than #(assoc env :_ret {:type :boolean :value (> %1 %2)})
-   :more_equal #(assoc env :_ret {:type :boolean :value (>= %1 %2)})
-   :less_equal #(assoc env :_ret {:type :boolean :value (<= %1 %2)})
-   :mod (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}] (assoc (merge env1 env2) :_ret (rem lhs rhs)))
-   :argument #(assoc env :_ret (keyword (str "%" %)))
-   :transp #(assoc env :_ret (transpose (:_ret %)))
-   :varget (fn [{varname :_ret :as env1}] (assoc env1 :_ret (varname env1)))})
-
 (def interpreter (dynamic-eval-args  make-lang0-instr-interpreting))
 
-(def prg "let hello = true;
-         if true {
-         12 + 3;
-         hello;
-         }")
+(defn apply-op
+  "applies `op` the args (isn the fort [lhs rhs]) and return the resulting environement"
+  [env op args]
+  (let [[lhs rhs] (map (partial execute env) args)]
+    (op lhs rhs)))
 
-(defn _print [ret]
-  (match [(:type ret)]
-    [:scalar] (:val ret)
-    [:matrix] ((comp :mat :val) ret)
-    :else (println "undefined return type" ret)))
+(defn assig
+  [env])
+
+(def add-dispatch {:ss (make-type-lhs-rhs + :scalar)
+                   :ms (make-type-lhs-rhs (ms-op +) :matrix)
+                   ;swapping arguments here
+                   :sm #((make-type-lhs-rhs (ms-op +) :matrix) %2 %1)
+                   :mm (make-type-lhs-rhs (mm-op +) :matrix)})
+
+(def sub-dispatch {:ss (make-type-lhs-rhs - :scalar)
+                   :ms (make-type-lhs-rhs (ms-op -) :matrix)
+                   ;broadcasting here is weird
+                   ;:sm #((make-type-lhs-rhs (ms-op -) :matrix) %2 %1)
+                   :sm (fn [& _] (assert false "broadcasting not working"))
+                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
+
+(def mul-dispatch {:ss (make-type-lhs-rhs * :scalar)
+                   :ms (make-type-lhs-rhs (ms-op *) :matrix)
+                   :sm #((make-type-lhs-rhs (ms-op *) :matrix) %2 %1)
+                   ; TODO: implement matrix multiplication
+                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
+
+(def div-dispatch {:ss (make-type-lhs-rhs / :scalar)
+                   :ms (make-type-lhs-rhs (ms-op /) :matrix)
+                   :sm #((make-type-lhs-rhs (ms-op /) :matrix) %2 %1)
+                   ; TODO: matrix matrix should not be allowed
+                   :mm (make-type-lhs-rhs (mm-op /) :matrix)})
+
+(def mod-dispatch {:ss (make-type-lhs-rhs mod :scalar)
+                   :ms (make-type-lhs-rhs (ms-op mod) :matrix)
+                   :sm #((make-type-lhs-rhs (ms-op mod) :matrix) %2 %1)
+                   ; TODO: matrix matrix should not be allowed
+                   :mm (make-type-lhs-rhs (mm-op mod) :matrix)})
+
+(defn op-dispatch [fs]
+  (fn [lhs rhs]
+    (match [((comp :type :_ret) lhs) ((comp :type :_ret) rhs)]
+      [:scalar :scalar] ((:ss fs) lhs rhs)
+      [:matrix :scalar] ((:ms fs) lhs rhs)
+      [:scalar :matrix] ((:sm fs) lhs rhs)
+      [:matrix :matrix] ((:mm fs) lhs rhs))))
+
+(defn execute [env ast]
+  (match [(first ast)]
+    [:prog] (reduce execute env (rest ast))
+    ; block have internal scoping, when merging their environement, only the values
+    ; of the parent env should be updated the other can be discarded...
+    ; also a block should not return value
+    [:block] (merge env (select-keys (assoc (reduce execute env (rest ast)) :_ret nil) (keys env)))
+    [:assig] (let [[{varname :_ret :as env1} {value :_ret :as env2}] (map (partial execute env) (rest ast))] (assoc (merge env1 env2) varname value :_ret value))
+    [:varget] (let [{varname :_ret :as env1} (execute env (second ast))] (assoc env1 :_ret varname))
+    ; operations
+    [:add] (apply-op env (op-dispatch add-dispatch) (rest ast))
+    [:sub] (apply-op env (op-dispatch sub-dispatch) (rest ast))
+    [:mult] (apply-op env (op-dispatch mul-dispatch) (rest ast))
+    [:div] (apply-op env (op-dispatch div-dispatch) (rest ast))
+    [:mod] (apply-op env (op-dispatch mod-dispatch) (rest ast))
+    [:_mat] (apply make-matrix (map (partial execute env) (rest ast)))
+    [:_vec] (let [elems (map (partial execute env) (rest ast))] (assoc (apply merge elems) :_ret (map :_ret elems)))
+    ; straightforward parsing
+    [:number] (assoc env :_ret {:type :scalar :val (Integer/parseInt (second ast))})
+    [:varname] (assoc env :_ret (keyword (second ast)))
+    :else (println "Unknown operation" (first ast))))
+
+(def prg "let hello = 12; {let toto = 17;}")
 
 (def evaluator (->> prg parser interpreter))
-
-(insta/visualize (parser prg))
+;((-> prg parser (partial execute {})))
+(execute {} (parser prg))
 ;(evaluator 1 7)
