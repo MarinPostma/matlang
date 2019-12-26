@@ -124,7 +124,7 @@
 
 (def sub-dispatch {:ss (make-type-lhs-rhs - :scalar)
                    :ms (make-type-lhs-rhs (ms-op -) :matrix)
-                   ;broadcasting here is weird
+                   ;broadcasting here is weird TODO: implement it later
                    ;:sm #((make-type-lhs-rhs (ms-op -) :matrix) %2 %1)
                    :sm (fn [& _] (assert false "broadcasting not working"))
                    :mm (make-type-lhs-rhs (mm-op -) :matrix)})
@@ -192,7 +192,7 @@
       [:mod] (apply-op env (op-dispatch mod-dispatch) params)
       [:_mat] (apply make-matrix (map (partial evaluate env) params))
       [:_vec] (let [elems (map (partial evaluate env) params)] (assoc (apply merge elems) :_ret (map :_ret elems)))
-          ; boolean stuff
+          ; boolean stuff TODO: implement it for matrices
       [:equal] (apply-op env (make-type-lhs-rhs = :boolean) params)
       [:less_than] (apply-op env (make-type-lhs-rhs < :boolean) params)
       [:more_than] (apply-op env (make-type-lhs-rhs > :boolean) params)
