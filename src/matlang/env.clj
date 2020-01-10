@@ -1,61 +1,63 @@
 (ns matlang.env)
 
-(def env (atom '()))
+(defn first-env
+  [env]
+  (let [head (first @env)]
+    (if head
+      @head
+      nil)))
 
-(defmacro deref-top
-  []
-  `(deref (first @env)))
+(defn get-ret
+  [env]
+  (:_ret (first-env env)))
 
-(defmacro get-ret
-  []
-  `(:_ret ~(deref-top)))
+(defn push-env-fn
+  "take an env stack and return a function that push an env on top of the env stack and returns the stack"
+  [env]
+  (fn [] (swap! env conj (atom {}))))
 
-(defn push-env
-  "push env on top of env stack"
-  []
-  (swap! env conj (atom {})))
-
-(defn pop-env
-  "pop env of the top of the stack, and returns ret"
-  []
-  (if (= 0 (count @env))
-    (throw (Exception. "Empty environement stack"))
-    (let [ret (get-ret)]
-      (swap! env rest)
-      ret)))
+(defn pop-env-fn
+  "takes an env stack and return a function that pops the env stack an return the ret value of the env"
+  [env]
+  (fn []
+    (if (= 0 (count @env))
+      (throw (Exception. "Empty environement stack"))
+      (let [ret (get-ret env)]
+        (swap! env rest)
+        ret))))
 
 (defn init-env
   "create env stack from initial environment"
   [init-state]
-  (if (= 0 (count @env))
+  (let [env (atom '())]
     (swap! env conj (atom init-state))
-    (throw (Exception. "Env can only be initialized once"))))
+    env))
 
-
-;;TODO: fix this methods to work woith global environement 
-
-
-(defn get-env-value
-  "get value from env"
-  [env key]
-  (loop [cur-env (first env) tail (rest env)]
-    (if cur-env
-      (let [cur-env @cur-env
-            value (key cur-env)]
-        (if (some? value)
-          (if (= value :uninitialized)
-            (throw (Exception. (str "Error: Uninitialized variable: " (name key))))
-            value)
-          (recur (first tail) (rest tail))))
-      nil)))
+(defn get-env-val-fn
+  "take an env stack and returns a function that gets a value in this env stack"
+  [env]
+  (fn [key]
+    (let [env @env]
+      (loop [cur-env (first env) tail (rest env)]
+        (if cur-env
+          (let [cur-env @cur-env
+                value (key cur-env)]
+            (if (some? value)
+              (if (= value :uninitialized)
+                (throw (Exception. (str "Error: Uninitialized variable: " (name key))))
+                value)
+              (recur (first tail) (rest tail))))
+          nil)))))
 
 (defn declare-env-value
   "declare a variable in the current environement"
-  ([env key] (declare-env-value env key :uninitialized))
-  ([env key value]
-   (let [head (first env)]
-     (if head
-       (swap! head assoc key value)))))
+  [env]
+  (fn
+    ([key] (declare-env-value key :uninitialized))
+    ([key value]
+     (let [head (first-env env)]
+       (if head
+         (swap! head assoc key value))))))
 
 (defn set-env-value
   "set value from env key"
