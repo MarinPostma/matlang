@@ -55,5 +55,15 @@
   (let [env (init-env {})
         get-env-val (get-env-val-fn env)
         declare-env-value (declare-env-value-fn env)]
-    (declare-env-value :hello 12)
-    (get-env-val :hello)))
+    (declare-env-value :hello)
+    (is (thrown? Exception (get-env-val :hello)))))
+
+(deftest test-declare-env-val
+  (let [env (init-env {})
+        get-env-val (get-env-val-fn env)
+        set-env-val (set-env-value-fn env)
+        declare-env-value (declare-env-value-fn env)]
+    (is (thrown? Exception (set-env-val :hello 12)))
+    (declare-env-value :hello)
+    (set-env-val :hello 12)
+    (is (= (get-env-val :hello) 12))))
