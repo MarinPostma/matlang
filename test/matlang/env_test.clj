@@ -24,3 +24,36 @@
         env-no-ret (init-env {:foo "bar"})]
     (is (= "hello" (get-ret env-ret)))
     (is (= nil (get-ret env-no-ret)))))
+
+(deftest test-push-env
+  (let [env (init-env {:foo "bar"})
+        push-env (push-env-fn env)]
+    (is (= {:foo "bar"} (first-env env)))
+    (push-env)
+    (is (= {} (first-env env)))))
+
+(deftest test-pop-env
+  (let [env (init-env {:_ret "bar"})
+        push-env (push-env-fn env)
+        pop-env (pop-env-fn env)]
+    (push-env)
+    (is (= nil (pop-env)))
+    (is (= "bar" (pop-env)))))
+
+(deftest test-get-env-var
+  (let [env (init-env {:foo "bar"})
+        push-env (push-env-fn env)
+        get-env-val (get-env-val-fn env)]
+    (is (= "bar" (get-env-val :foo)))
+    (is (= nil (get-env-val :bar)))
+    (push-env)
+    (swap! (first @env) assoc :bar "foobar" :foo "neofoo")
+    (is (= "neofoo" (get-env-val :foo)))
+    (is (= "foobar" (get-env-val :bar)))))
+
+(deftest test-declare-env-val
+  (let [env (init-env {})
+        get-env-val (get-env-val-fn env)
+        declare-env-value (declare-env-value-fn env)]
+    (declare-env-value :hello 12)
+    (get-env-val :hello)))

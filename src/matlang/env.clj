@@ -42,30 +42,39 @@
         (if cur-env
           (let [cur-env @cur-env
                 value (key cur-env)]
-            (if (some? value)
+            (if value
               (if (= value :uninitialized)
                 (throw (Exception. (str "Error: Uninitialized variable: " (name key))))
                 value)
               (recur (first tail) (rest tail))))
           nil)))))
 
-(defn declare-env-value
-  "declare a variable in the current environement"
+(defn declare-env-value-fn
+  "declare a variable in the current environment"
   [env]
-  (fn
-    ([key] (declare-env-value key :uninitialized))
-    ([key value]
-     (let [head (first-env env)]
-       (if head
-         (swap! head assoc key value))))))
+  (fn [k]
+    (let [head (first @env)]
+      (if head
+        (swap! head assoc k :uninitialized)))))
 
-(defn set-env-value
+(defn set-env-value-fn
   "set value from env key"
-  [env key value]
-  (loop [cur-env (first env) tail (rest env)]
-    (if cur-env
-      (let [cur @cur-env]
-        (if (key cur)
-          (swap! cur-env assoc key value)
-          (recur (first tail) (rest tail))))
-      (throw (Exception. (str "Error: Undefined variable: " key))))))
+  [env]
+  (fn [key value]
+    (loop [cur-env (first @env) tail (rest @env)]
+      (if cur-env
+        (let [cur @cur-env]
+          (if (key cur)
+            (swap! cur-env assoc key value)
+            (recur (first tail) (rest tail))))
+        (throw (Exception. (str "Error: Undefined variable: " key)))))))
+
+(defmacro make-env-fn
+  "generate environnement functions for a given env"
+  [env]
+  `(do
+     (def ~(symbol "pop-env") (pop-env-fn ~env))
+     (def ~(symbol "push-env") (push-env-fn ~env))
+     (def ~(symbol "set-env-value") (set-env-value-fn ~env))
+     (def ~(symbol "get-env-value") (get-env-val-fn ~env))
+     (def ~(symbol "declare-env-value") (declare-env-value-fn ~env))))

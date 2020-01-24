@@ -1,0 +1,78 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_OUTPUT_MODE	u-ctags	/u-ctags or e-ctags/
+!_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
+!_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
+!_TAG_PROGRAM_URL	https://ctags.io/	/official site/
+!_TAG_PROGRAM_VERSION	0.0.0	/b9bde3d8/
+0.1.0 - 2019-12-05	CHANGELOG.md	/^## 0.1.0 - 2019-12-05$/;"	s
+Added	CHANGELOG.md	/^### Added$/;"	S
+Addition - Subtraction - Products	spec.md	/^##### Addition - Subtraction - Products$/;"	T
+Booleans	spec.md	/^#### Booleans$/;"	t
+Change Log	CHANGELOG.md	/^# Change Log$/;"	c
+Changed	CHANGELOG.md	/^### Changed$/;"	S
+Control Flow	spec.md	/^### Control Flow$/;"	S
+Control flow	README.md	/^### Control flow$/;"	S
+Fixed	CHANGELOG.md	/^### Fixed$/;"	S
+Functions	spec.md	/^## Functions$/;"	s
+Introduction to matlang	doc/intro.md	/^# Introduction to matlang$/;"	c
+Matlang Specifications	spec.md	/^# Matlang Specifications$/;"	c
+Matrices	spec.md	/^#### Matrices$/;"	t
+Numbers	spec.md	/^#### Numbers$/;"	t
+Operations	spec.md	/^### Operations$/;"	S
+Operations and Flow Control	spec.md	/^## Operations and Flow Control$/;"	s
+Programm Structure	spec.md	/^## Programm Structure$/;"	s
+Removed	CHANGELOG.md	/^### Removed$/;"	S
+Roadmap	README.md	/^## Roadmap$/;"	s
+Scoping	spec.md	/^### Scoping$/;"	S
+Shadowing	spec.md	/^### Shadowing$/;"	S
+Types	README.md	/^### Types$/;"	S
+Types	spec.md	/^### Types$/;"	S
+Variable declaration	README.md	/^### Variable declaration$/;"	S
+Variable declaration and types	spec.md	/^### Variable declaration and types$/;"	S
+Variable initialisation	spec.md	/^### Variable initialisation$/;"	S
+Variables	spec.md	/^## Variables$/;"	s
+[0.1.1] - 2019-12-05	CHANGELOG.md	/^## [0.1.1] - 2019-12-05$/;"	s
+[Unreleased]	CHANGELOG.md	/^## [Unreleased]$/;"	s
+apply-op	src/matlang/core.clj	/^(defn apply-op$/;"	f	namespace:matlang.core
+args-to-env	src/matlang/core.clj	/^(defn args-to-env [args] (into {} (map-indexed #(vector (keyword (str "%" %1)) %2) args)))$/;"	f	namespace:matlang.core
+artifactId	target/default+test+test/classes/META-INF/maven/matlang/matlang/pom.properties	/^artifactId=matlang$/;"	k
+artifactId	target/default/classes/META-INF/maven/matlang/matlang/pom.properties	/^artifactId=matlang$/;"	k
+concat	spec.md	/^##### concat$/;"	T
+declare-env-value	src/matlang/env.clj	/^(defn declare-env-value$/;"	f	namespace:matlang.env
+dynamic-eval-args	src/matlang/core.clj	/^(defn dynamic-eval-args [make-interpreter]$/;"	f	namespace:matlang.core
+evaluate	src/matlang/core.clj	/^(defn evaluate [env ast]$/;"	f	namespace:matlang.core
+first-env	src/matlang/env.clj	/^(defn first-env$/;"	f	namespace:matlang.env
+get-env-val-fn	src/matlang/env.clj	/^(defn get-env-val-fn$/;"	f	namespace:matlang.env
+get-op	src/matlang/types/ops.clj	/^(defn get-op$/;"	f	namespace:matlang.types.ops
+get-ret	src/matlang/env.clj	/^(defn get-ret$/;"	f	namespace:matlang.env
+groupId	target/default+test+test/classes/META-INF/maven/matlang/matlang/pom.properties	/^groupId=matlang$/;"	k
+groupId	target/default/classes/META-INF/maven/matlang/matlang/pom.properties	/^groupId=matlang$/;"	k
+guide	README.md	/^## guide$/;"	s
+if-else statements	spec.md	/^#### if-else statements$/;"	t
+init-env	src/matlang/env.clj	/^(defn init-env$/;"	f	namespace:matlang.env
+loops	README.md	/^### loops$/;"	S
+make-if	src/matlang/core.clj	/^(defn make-if$/;"	f	namespace:matlang.core
+make-interpreting	src/matlang/core.clj	/^(defn make-interpreting [make-instr-interpreting init-env]$/;"	f	namespace:matlang.core
+make-matrix	src/matlang/core.clj	/^(defn make-matrix [& args]$/;"	f	namespace:matlang.core
+make-type-lhs-rhs	src/matlang/core.clj	/^(defn make-type-lhs-rhs [f t]$/;"	f	namespace:matlang.core
+make-while	src/matlang/core.clj	/^(defn make-while$/;"	f	namespace:matlang.core
+matlang	README.md	/^# matlang$/;"	c
+matlang.core	src/matlang/core.clj	/^(ns matlang.core$/;"	n
+matlang.env	src/matlang/env.clj	/^(ns matlang.env)$/;"	n
+matlang.env-test	test/matlang/env_test.clj	/^(ns matlang.env-test$/;"	n
+matlang.types.integers	src/matlang/types/integers.clj	/^(ns matlang.types.integers)$/;"	n
+matlang.types.macros	src/matlang/types/macros.clj	/^(ns matlang.types.macros)$/;"	n
+matlang.types.ops	src/matlang/types/ops.clj	/^(ns matlang.types.ops)$/;"	n
+mm-op	src/matlang/core.clj	/^(defn mm-op [f]$/;"	f	namespace:matlang.core
+ms-op	src/matlang/core.clj	/^(defn ms-op [f]$/;"	f	namespace:matlang.core
+op-dispatch	src/matlang/core.clj	/^(defn op-dispatch [fs]$/;"	f	namespace:matlang.core
+pop-env-fn	src/matlang/env.clj	/^(defn pop-env-fn$/;"	f	namespace:matlang.env
+push-env-fn	src/matlang/env.clj	/^(defn push-env-fn$/;"	f	namespace:matlang.env
+revision	target/default+test+test/classes/META-INF/maven/matlang/matlang/pom.properties	/^revision=0974a1db9819c00cb0fe9150c6bd7f9e6dfd6380$/;"	k
+revision	target/default/classes/META-INF/maven/matlang/matlang/pom.properties	/^revision=0974a1db9819c00cb0fe9150c6bd7f9e6dfd6380$/;"	k
+set-env-value	src/matlang/env.clj	/^(defn set-env-value$/;"	f	namespace:matlang.env
+transpose	src/matlang/core.clj	/^(defn transpose [mat]$/;"	f	namespace:matlang.core
+version	target/default+test+test/classes/META-INF/maven/matlang/matlang/pom.properties	/^version=0.1.0-SNAPSHOT$/;"	k
+version	target/default/classes/META-INF/maven/matlang/matlang/pom.properties	/^version=0.1.0-SNAPSHOT$/;"	k
+while	spec.md	/^#### while$/;"	t
