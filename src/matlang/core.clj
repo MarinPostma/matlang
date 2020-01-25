@@ -10,9 +10,11 @@
    "
    prog = (spaces form spaces)*
    <form> = (block | control_flow | ( expr spaces <';'> ))
-   <expr> = assig | declare | add-sub | logical_statement
+   <expr> = assig | declare | add-sub | logical_statement | defn | fncall
    <control_flow> = if_statement | while_statement
    declare = <'let'> spaces varname (spaces <'='> spaces expr)?
+   defn = <'fn'> spaces <'('> (spaces varname spaces <','> spaces)* ( varname )? spaces <')'> spaces block
+   fncall = varget <'('> (spaces expr spaces <','> spaces)* ( expr )? spaces <')'>
    assig = spaces varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
@@ -22,11 +24,9 @@
    div = mult-div spaces <'/'> spaces factor
    mod = mult-div spaces <'%'> spaces factor
    <factor> = number | <'('> expr <')'> | varget | assig | mat
-   <mat> = _mat | transp
+   <mat> = _mat
    _mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'>
    _vec = (spaces number <#'\\s'> spaces)* (number)?
-   <spaces> = <#'\\s*'>
-   transp = (mat | varget) <'\\''>
    number = float | integer
    float = #'-?[0-9]+.[0-9]+'
    integer = #'-?[0-9]+'
@@ -44,6 +44,7 @@
     more_equal = expr spaces <'>='> spaces expr
    true = <#'true'>
    false = <#'false'>
+   <spaces> = <#'\\s*'>
    argument = <'%'>#'[0-9]+'"))
 
 (declare exec exec-block)
@@ -137,8 +138,7 @@
         (if (:value predicate)
           (exec true-branch)
           (if false-branch
-            (exec false-branch)))
-        :none)
+            (exec false-branch))))
       (throw (Exception. (str "Expected predicate to be of type boolean, found"))))))
 
 (defn do-declare
@@ -146,8 +146,10 @@
   (let [varname (exec (first args))]
     (declare-env-value varname)
     (if (second args)
-      (set-env-value varname (exec (second args))))
-    :none))
+      (let [value (exec (second args))]
+        (set-env-value varname value)
+        value)
+      :none)))
 
 (defn do-assig
   [args]
@@ -161,9 +163,29 @@
     (if (= :boolean (:type predicate))
       (when (:value predicate)
         (exec (second args))
-        (recur (exec (first args)))
-        :none)
+        (recur (exec (first args))))
       (throw (Exception. (str "Expected predicate to be of type boolean, found: " (:type predicate)))))))
+
+(defn do-less-than
+  [args]
+  (let [lhs (exec (first args))
+        rhs (exec (second args))]
+    (match [(:type lhs) (:type rhs)]
+      [:integer :integer] {:type :boolean :value (< (:value lhs) (:value rhs))}
+      [:float :integer] {:type :boolean :value (< (:value lhs) (:value rhs))}
+      [:integer :float] {:type :boolean :value (< (:value lhs) (:value rhs))}
+      [:float :float] {:type :boolean :value (< (:value lhs) (:value rhs))}
+      :else (throw (Exception. (str "Unsuported LT with types " (:type lhs) " and " (:type rhs)))))))
+
+(defn do-defn
+  [args]
+  (let [params (drop-last args)
+        body (last args)]
+    {:type :function :value {:params params
+                             :body body}}))
+
+(defn do-fncall
+  [args])
 
 (defn exec
   [inst]
@@ -171,7 +193,9 @@
         args (rest inst)]
     (do
       (match tok-type
-        :block (set-env-value :_ret (do (push-env) (exec-block args) (pop-env) :none))
+        :defn (set-env-value :_ret (do-defn args))
+        :fncall (set-env-value :_ret (do-fncall args))
+        :block (set-env-value :_ret (do (push-env) (exec-block args) (pop-env)))
         :varget (set-env-value :_ret (get-env-value (exec (first args))))
         :assig (set-env-value :_ret (do-assig args))
         :varname (set-env-value :_ret  (keyword (first args)))
@@ -183,6 +207,7 @@
         :mult (set-env-value :_ret  (do-mult args))
         :div (set-env-value :_ret  (do-div args))
         :mod (set-env-value :_ret  (do-mod args))
+        :less_than (set-env-value :_ret (do-less-than args))
         :number (set-env-value :_ret  (parse-num args))
         :true (set-env-value :_ret  {:type :boolean :value true})
         :false (set-env-value :_ret  {:type :boolean :value false})
@@ -196,8 +221,7 @@
     (do
       (exec cur-inst)
       (if (> (count remaining) 0)
-        (recur (first remaining) (rest remaining)))))
-  :none)
+        (recur (first remaining) (rest remaining))))))
 
 (defn run-program
   "runs a program string"
@@ -209,7 +233,7 @@
         (println env))
       (throw (Exception. "Invalid program")))))
 
-(def prgm "let machin = 0; if true {machin = 12;} else {machin = 14;}")
+(def prgm "{let hello = 10;}")
 ;(def prgm "let machin =   1231; machin = 0;")
 (parser prgm)
 (run-program prgm)
