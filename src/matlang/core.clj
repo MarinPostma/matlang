@@ -181,11 +181,29 @@
   [args]
   (let [params (drop-last args)
         body (last args)]
-    {:type :function :value {:params params
+    {:type :function :value {:params (map exec params)
                              :body body}}))
 
 (defn do-fncall
-  [args])
+  [args]
+  (let [function (exec (first args))
+        function-name (second (first args))
+        params (rest args)]
+    (if (= (:type function) :function)
+      (let [function (:value function)]
+        (push-env)
+        ;; setup function environement
+        (if (not= (count params) (count (:params function)))
+          (throw (Exception. "wrong number of arguments for " function-name)))
+        (doseq [pair (map vector (:params function) params)]
+          (println "here")
+          (declare-env-value (first pair))
+          (set-env-value (first pair) (exec (second pair))))
+        ;; execute function body:
+        (exec-block (rest (:body function)))
+        ; return block value and pop function env
+        (pop-env))
+      (throw (Exception. (str  function-name " is not a function."))))))
 
 (defn exec
   [inst]
@@ -233,7 +251,7 @@
         (println env))
       (throw (Exception. "Invalid program")))))
 
-(def prgm "{let hello = 10;}")
+(def prgm "let hello = fn(truc) {truc + 1;}; let lol = hello(12);")
 ;(def prgm "let machin =   1231; machin = 0;")
 (parser prgm)
 (run-program prgm)
