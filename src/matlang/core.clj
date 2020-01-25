@@ -46,6 +46,8 @@
    false = <#'false'>
    argument = <'%'>#'[0-9]+'"))
 
+(declare exec exec-block)
+
 ;; define empty env
 (def env (init-env {}))
 
@@ -128,15 +130,14 @@
   [args]
   (let [predicate (exec (first args))
         true-branch (second args)
-        false-branch (nth 3 args)]
+        false-branch (nth args 2 nil)]
+    (println false-branch)
     (if (= :boolean (:type predicate))
       (do
-        (push-env)
         (if (:value predicate)
-          (exec-block true-branch)
+          (exec true-branch)
           (if false-branch
-            (exec-block false-branch)))
-        (pop-env)
+            (exec false-branch)))
         :none)
       (throw (Exception. (str "Expected predicate to be of type boolean, found"))))))
 
@@ -148,24 +149,43 @@
       (set-env-value varname (exec (second args))))
     :none))
 
+(defn do-assig
+  [args]
+  (let [value (exec (second args))
+        varname (exec (first args))]
+    (set-env-value varname value)))
+
+(defn do-while
+  [args]
+  (loop [predicate (exec (first args))]
+    (if (= :boolean (:type predicate))
+      (when (:value predicate)
+        (exec (second args))
+        (recur (exec (first args)))
+        :none)
+      (throw (Exception. (str "Expected predicate to be of type boolean, found: " (:type predicate)))))))
+
 (defn exec
   [inst]
   (let [tok-type (first inst)
         args (rest inst)]
     (do
       (match tok-type
-        :block (set-env-value :_ret (exec-block args))
-        :varname (set-env-value :_ret (keyword (first args)))
-        :declare (set-env-value :_ret (do-declare args))
-        :if (set-env-value :_ret (do-if args))
-        :add (set-env-value :_ret (do-add args))
-        :sub (set-env-value :_ret (do-sub args))
-        :mult (set-env-value :_ret (do-mult args))
-        :div (set-env-value :_ret (do-div args))
-        :mod (set-env-value :_ret (do-mod args))
-        :number (set-env-value :_ret (parse-num args))
-        :true (set-env-value :_ret {:type :boolean :value true})
-        :false (set-env-value :_ret {:type :boolean :value false})
+        :block (set-env-value :_ret (do (push-env) (exec-block args) (pop-env) :none))
+        :varget (set-env-value :_ret (get-env-value (exec (first args))))
+        :assig (set-env-value :_ret (do-assig args))
+        :varname (set-env-value :_ret  (keyword (first args)))
+        :declare (set-env-value :_ret  (do-declare args))
+        :while_statement (set-env-value :_ret (do-while args))
+        :if_statement (set-env-value :_ret  (do-if args))
+        :add (set-env-value :_ret  (do-add args))
+        :sub (set-env-value :_ret  (do-sub args))
+        :mult (set-env-value :_ret  (do-mult args))
+        :div (set-env-value :_ret  (do-div args))
+        :mod (set-env-value :_ret  (do-mod args))
+        :number (set-env-value :_ret  (parse-num args))
+        :true (set-env-value :_ret  {:type :boolean :value true})
+        :false (set-env-value :_ret  {:type :boolean :value false})
         :else (throw (Exception. "unknown token")))
       (get-env-value :_ret))))
 
@@ -176,7 +196,8 @@
     (do
       (exec cur-inst)
       (if (> (count remaining) 0)
-        (recur (first remaining) (rest remaining))))))
+        (recur (first remaining) (rest remaining)))))
+  :none)
 
 (defn run-program
   "runs a program string"
@@ -188,6 +209,7 @@
         (println env))
       (throw (Exception. "Invalid program")))))
 
-(def prgm "{let hello = 12; let tutu = 11;}")
+(def prgm "let machin = 0; if true {machin = 12;} else {machin = 14;}")
+;(def prgm "let machin =   1231; machin = 0;")
 (parser prgm)
-;;(run-program prgm)
+(run-program prgm)
