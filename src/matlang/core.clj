@@ -14,7 +14,7 @@
    <control_flow> = if_statement | while_statement
    declare = <'let'> spaces varname (spaces <'='> spaces expr)?
    defn = <'fn'> spaces <'('> (spaces varname spaces <','> spaces)* ( varname )? spaces <')'> spaces block
-   fncall = varget <'('> (spaces expr spaces <','> spaces)* ( expr )? spaces <')'>
+   fncall = varname <'('> (spaces expr spaces <','> spaces)* ( expr )? spaces <')'>
    assig = spaces varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
@@ -184,26 +184,33 @@
     {:type :function :value {:params (map exec params)
                              :body body}}))
 
+(defn exec-fn
+  [function params]
+  (do
+    (println function)
+    ;; push new env
+    (push-env)
+        ;; setup function environement
+    (if (> (count params) 0)
+      (doseq [pair (map vector (:params function) params)]
+        (declare-env-value (first pair))
+        (set-env-value (first pair) (exec (second pair)))))
+        ;; execute function body:
+    (exec-block (rest (:body function)))
+        ; return block value and pop function env
+    (pop-env)))
+
 (defn do-fncall
   [args]
-  (let [function (exec (first args))
-        function-name (second (first args))
-        params (rest args)]
-    (if (= (:type function) :function)
-      (let [function (:value function)]
-        (push-env)
-        ;; setup function environement
-        (if (not= (count params) (count (:params function)))
-          (throw (Exception. "wrong number of arguments for " function-name)))
-        (doseq [pair (map vector (:params function) params)]
-          (println "here")
-          (declare-env-value (first pair))
-          (set-env-value (first pair) (exec (second pair))))
-        ;; execute function body:
-        (exec-block (rest (:body function)))
-        ; return block value and pop function env
-        (pop-env))
-      (throw (Exception. (str  function-name " is not a function."))))))
+  (let [function-name (exec (first args))
+        params (rest args)
+        function (get-env-value function-name)]
+    (if (not= (:type function) :function)
+      (throw (Exception. (str  function-name " is not a function."))))
+    (let [function (:value function)]
+      (if (not= (count params) (count (:params function)))
+        (throw (Exception. "wrong number of arguments for " function-name)))
+      (exec-fn function params))))
 
 (defn exec
   [inst]
@@ -229,7 +236,7 @@
         :number (set-env-value :_ret  (parse-num args))
         :true (set-env-value :_ret  {:type :boolean :value true})
         :false (set-env-value :_ret  {:type :boolean :value false})
-        :else (throw (Exception. "unknown token")))
+        :else (throw (Exception. (str "unknown token: " tok-type))))
       (get-env-value :_ret))))
 
 (defn exec-block
@@ -247,11 +254,17 @@
   (let [ast (parser program)]
     (if (= (first ast) :prog)
       (do
+        ;; parse the program, exec global scope
         (exec-block (rest ast))
+        ;; run main
+        (if-let [main (get-env-value :main)]
+          (if (= (:type main) :function)
+            (exec-fn (:value main) [])
+            (throw (Exception. "main is not a function")))
+          (throw (Exception. "no main found")))
         (println env))
       (throw (Exception. "Invalid program")))))
 
-(def prgm "let hello = fn(truc) {truc + 1;}; let lol = hello(12);")
+(def prgm "let hello = 0; let main = fn() {hello = hello + 1;};")
 ;(def prgm "let machin =   1231; machin = 0;")
-(parser prgm)
 (run-program prgm)
