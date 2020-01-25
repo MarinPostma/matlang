@@ -1,6 +1,7 @@
 (ns matlang.core
   (:require [instaparse.core :as insta]
             [rhizome.viz]
+            [matlang.env :refer [make-env-fn init-env]]
             [clojure.core.match :refer [match]])
   (:gen-class))
 
@@ -9,8 +10,9 @@
    "
    prog = (spaces form spaces)*
    <form> = (block | control_flow | ( expr spaces <';'> ))
-   <expr> = assig | add-sub | logical_statement
+   <expr> = assig | declare | add-sub | logical_statement
    <control_flow> = if_statement | while_statement
+   declare = <'let'> spaces varname (spaces <'='> spaces expr)?
    assig = spaces varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
    sub = add-sub spaces <'-'> spaces mult-div
@@ -25,7 +27,9 @@
    _vec = (spaces number <#'\\s'> spaces)* (number)?
    <spaces> = <#'\\s*'>
    transp = (mat | varget) <'\\''>
-   number = #'-?[0-9]+'
+   number = float | integer
+   float = #'-?[0-9]+.[0-9]+'
+   integer = #'-?[0-9]+'
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
    block = <'{'>(spaces form spaces)*<'}'>
@@ -41,175 +45,149 @@
    true = <#'true'>
    false = <#'false'>
    argument = <'%'>#'[0-9]+'"))
-;(insta/visualize (const-parser "-123"))
-;(prn (const-parser "   -123    "))
 
+;; define empty env
+(def env (init-env {}))
 
-(defn args-to-env [args] (into {} (map-indexed #(vector (keyword (str "%" %1)) %2) args)))
+;; generate functions to manipulate env  all functions to manipulate env are now in scope :
+;; push-env
+;; pop-env
+;; push-env
+;; set-env-value
+;; get-env-value
+;; declare-env-value
 
-(defn make-interpreting [make-instr-interpreting init-env]
-  {:prog (fn [& instrs] (:_ret (reduce
-                                (fn [env instr]
-                                  (insta/transform (make-instr-interpreting env) instr))
-                                init-env
-                                instrs)))})
+(make-env-fn env)
 
-(defn dynamic-eval-args [make-interpreter]
-  (fn [ast]
-    (fn [& args]
-      (insta/transform (make-interpreting make-interpreter (assoc (args-to-env args) :_ret 0)) ast))))
+;; inject program args
+;; TODO
 
-(defn make-matrix [& args]
-  (let [mat (map :_ret args)
-        rows (count mat)
-        cols (if (> rows 0) (count (first mat)) 0)]
+(defn parse-num
+  [args]
+  (let [args (first args)
+        t (first args)
+        v (second args)]
+    {:type t
+     :value (if (= t :integer)
+              (Integer/parseInt v)
+              (Float/parseFloat v))}))
+
+(defn do-add
+  [args]
+  (let [lhs (exec (first args))
+        rhs (exec (second args))]
+    (match [(:type lhs) (:type rhs)]
+      [:integer :integer] {:type :integer :value (+ (:value lhs) (:value rhs))}
+      [:float :integer] {:type :float :value (+ (:value lhs) (:value rhs))}
+      [:integer :float] {:type :float :value (+ (:value lhs) (:value rhs))}
+      [:float :float] {:type :float :value (+ (:value lhs) (:value rhs))}
+      :else (throw (Exception. (str "Unsuported add with types " (:type lhs) " and " (:type rhs)))))))
+
+(defn do-sub
+  [args]
+  (let [lhs (exec (first args))
+        rhs (exec (second args))]
+    (match [(:type lhs) (:type rhs)]
+      [:integer :integer] {:type :integer :value (- (:value lhs) (:value rhs))}
+      [:float :integer] {:type :float :value (- (:value lhs) (:value rhs))}
+      [:integer :float] {:type :float :value (- (:value lhs) (:value rhs))}
+      [:float :float] {:type :float :value (- (:value lhs) (:value rhs))}
+      :else (throw (Exception. (str "Unsuported sub with types " (:type lhs) " and " (:type rhs)))))))
+
+(defn do-mult
+  [args]
+  (let [lhs (exec (first args))
+        rhs (exec (second args))]
+    (match [(:type lhs) (:type rhs)]
+      [:integer :integer] {:type :integer :value (* (:value lhs) (:value rhs))}
+      [:float :integer] {:type :float :value (* (:value lhs) (:value rhs))}
+      [:integer :float] {:type :float :value (* (:value lhs) (:value rhs))}
+      [:float :float] {:type :float :value (* (:value lhs) (:value rhs))}
+      :else (throw (Exception. (str "Unsuported mult with types " (:type lhs) " and " (:type rhs)))))))
+
+(defn do-div
+  [args]
+  (let [lhs (exec (first args))
+        rhs (exec (second args))]
+    (match [(:type lhs) (:type rhs)]
+      [:integer :integer] {:type :integer :value (/ (:value lhs) (:value rhs))}
+      [:float :integer] {:type :float :value (/ (:value lhs) (:value rhs))}
+      [:integer :float] {:type :float :value (/ (:value lhs) (:value rhs))}
+      [:float :float] {:type :float :value (/ (:value lhs) (:value rhs))}
+      :else (throw (Exception. (str "Unsuported mult with types " (:type lhs) " and " (:type rhs)))))))
+
+(defn do-mod
+  [args]
+  (let [lhs (exec (first args))
+        rhs (exec (second args))]
+    (match [(:type lhs) (:type rhs)]
+      [:integer :integer] {:type :integer :value (mod (:value lhs) (:value rhs))}
+      :else (throw (Exception. (str "Unsuported mod with types " (:type lhs) " and " (:type rhs)))))))
+
+(defn do-if
+  [args]
+  (let [predicate (exec (first args))
+        true-branch (second args)
+        false-branch (nth 3 args)]
+    (if (= :boolean (:type predicate))
+      (do
+        (push-env)
+        (if (:value predicate)
+          (exec-block true-branch)
+          (if false-branch
+            (exec-block false-branch)))
+        (pop-env)
+        :none)
+      (throw (Exception. (str "Expected predicate to be of type boolean, found"))))))
+
+(defn do-declare
+  [args]
+  (let [varname (exec (first args))]
+    (declare-env-value varname)
+    (if (second args)
+      (set-env-value varname (exec (second args))))
+    :none))
+
+(defn exec
+  [inst]
+  (let [tok-type (first inst)
+        args (rest inst)]
     (do
-      (println args)
-      (assert (every? #(= (count %) cols) mat) "invalid matrix size"))
-    (assoc (apply merge args) :_ret {:type :matrix
-                                     :val {:shape (list rows cols)
-                                           :mat (map #(map :val %) mat)}})))
+      (match tok-type
+        :block (set-env-value :_ret (exec-block args))
+        :varname (set-env-value :_ret (keyword (first args)))
+        :declare (set-env-value :_ret (do-declare args))
+        :if (set-env-value :_ret (do-if args))
+        :add (set-env-value :_ret (do-add args))
+        :sub (set-env-value :_ret (do-sub args))
+        :mult (set-env-value :_ret (do-mult args))
+        :div (set-env-value :_ret (do-div args))
+        :mod (set-env-value :_ret (do-mod args))
+        :number (set-env-value :_ret (parse-num args))
+        :true (set-env-value :_ret {:type :boolean :value true})
+        :false (set-env-value :_ret {:type :boolean :value false})
+        :else (throw (Exception. "unknown token")))
+      (get-env-value :_ret))))
 
-(defn make-type-lhs-rhs [f t]
-  (fn [{lhs :_ret :as env1} {rhs :_ret :as env2}]
-    (assoc
-     (merge env1 env2)
-     :_ret (assoc
-            {}
-            :type t
-            :val (f (:val lhs) (:val rhs))))))
-
-(defn ms-op [f]
-  (fn [matrix scalar]
-    {:shape (:shape matrix)
-     :mat (map #(map (partial f scalar) %) (:mat matrix))}))
-
-(defn mm-op [f]
-  (fn [m1 m2]
+(defn exec-block
+  [block]
+  (loop [cur-inst (first block)
+         remaining (rest block)]
     (do
-      (assert (= (:shape m1) (:shape m2)) "shapes must  be equal for matrix addition")
-      {:shape (:shape m1)
-       :mat (map #(doall
-                   (map f (first %) (second %)))
-                 (map vector (:mat m1) (:mat m2)))})))
+      (exec cur-inst)
+      (if (> (count remaining) 0)
+        (recur (first remaining) (rest remaining))))))
 
-(defn transpose [mat]
-  (do
-    (println "this is the mat" mat)
-    (assert (= (:type mat) :matrix) "Only matrix can be transposed")
-    (let [{shape :shape mat :mat} (:val mat)]
-      {:type :matrix
-       :val {:shape (list (second shape) (first shape))
-             :mat (apply map vector mat)}})))
+(defn run-program
+  "runs a program string"
+  [program]
+  (let [ast (parser program)]
+    (if (= (first ast) :prog)
+      (do
+        (exec-block (rest ast))
+        (println env))
+      (throw (Exception. "Invalid program")))))
 
-(defn op-dispatch [fs]
-  (fn [lhs rhs]
-    (match [((comp :type :_ret) lhs) ((comp :type :_ret) rhs)]
-      [:scalar :scalar] ((:ss fs) lhs rhs)
-      [:matrix :scalar] ((:ms fs) lhs rhs)
-      [:scalar :matrix] ((:sm fs) lhs rhs)
-      [:matrix :matrix] ((:mm fs) lhs rhs))))
-
-(defn apply-op
-  "applies `op` the args (isn the fort [lhs rhs]) and return the resulting environement"
-  [env op args]
-  (let [[lhs rhs] (map (partial evaluate env) args)]
-    (op lhs rhs)))
-
-(def add-dispatch {:ss (make-type-lhs-rhs + :scalar)
-                   :ms (make-type-lhs-rhs (ms-op +) :matrix)
-                   ;swapping arguments here
-                   :sm #((make-type-lhs-rhs (ms-op +) :matrix) %2 %1)
-                   :mm (make-type-lhs-rhs (mm-op +) :matrix)})
-
-(def sub-dispatch {:ss (make-type-lhs-rhs - :scalar)
-                   :ms (make-type-lhs-rhs (ms-op -) :matrix)
-                   ;broadcasting here is weird TODO: implement it later
-                   ;:sm #((make-type-lhs-rhs (ms-op -) :matrix) %2 %1)
-                   :sm (fn [& _] (assert false "broadcasting not working"))
-                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
-
-(def mul-dispatch {:ss (make-type-lhs-rhs * :scalar)
-                   :ms (make-type-lhs-rhs (ms-op *) :matrix)
-                   :sm #((make-type-lhs-rhs (ms-op *) :matrix) %2 %1)
-                   ; TODO: implement matrix multiplication
-                   :mm (make-type-lhs-rhs (mm-op -) :matrix)})
-
-(def div-dispatch {:ss (make-type-lhs-rhs / :scalar)
-                   :ms (make-type-lhs-rhs (ms-op /) :matrix)
-                   :sm #((make-type-lhs-rhs (ms-op /) :matrix) %2 %1)
-                   ; TODO: matrix matrix should not be allowed
-                   :mm (make-type-lhs-rhs (mm-op /) :matrix)})
-
-(def mod-dispatch {:ss (make-type-lhs-rhs mod :scalar)
-                   :ms (make-type-lhs-rhs (ms-op mod) :matrix)
-                   :sm #((make-type-lhs-rhs (ms-op mod) :matrix) %2 %1)
-                   ; TODO: matrix matrix should not be allowed
-                   :mm (make-type-lhs-rhs (mm-op mod) :matrix)})
-
-(defn op-dispatch [fs]
-  (fn [lhs rhs]
-    (match [((comp :type :_ret) lhs) ((comp :type :_ret) rhs)]
-      [:scalar :scalar] ((:ss fs) lhs rhs)
-      [:matrix :scalar] ((:ms fs) lhs rhs)
-      [:scalar :matrix] ((:sm fs) lhs rhs)
-      [:matrix :matrix] ((:mm fs) lhs rhs))))
-
-(defn make-if
-  ([env _test block]
-   ; side effects in the test statement affect the outer scope
-   ; if blocks
-   (let [{ret :_ret :as env1} (evaluate env _test)]
-     (if (:val ret) (evaluate env1 block) env1)))
-  ; if else blocks
-  ([env _test if-block else-block]
-   (let [{ret :_ret :as env1} (evaluate env _test)]
-     (if (:val ret) (evaluate env1 if-block) (evaluate env1 else-block)))))
-
-(defn make-while
-  [env _test block]
-  (loop [{t :_ret :as env1} (evaluate env _test)]
-    (if (:val t)
-      (let [nenv (evaluate env1 block)]
-        (recur (evaluate nenv _test)))
-      env1)))
-
-(defn evaluate [env ast]
-  (let [token (first ast) params (rest ast)]
-    (match [token]
-      [:prog] (reduce evaluate env params)
-          ; block have internal scoping, when merging their environement, only the values
-          ; of the parent env should be updated the other can be discarded...
-          ; also a block should not return value
-      [:block] (merge env (select-keys (assoc (reduce evaluate env params) :_ret nil) (keys env)))
-      [:assig] (let [[{varname :_ret :as env1} {value :_ret :as env2}] (map (partial evaluate env) params)] (assoc (merge env1 env2) varname value :_ret value))
-      [:varget] (let [{varname :_ret :as env1} (evaluate env (second ast))] (assoc env1 :_ret ((keyword varname) env1)))
-          ; operations
-      [:add] (apply-op env (op-dispatch add-dispatch) params)
-      [:sub] (apply-op env (op-dispatch sub-dispatch) params)
-      [:mult] (apply-op env (op-dispatch mul-dispatch) params)
-      [:div] (apply-op env (op-dispatch div-dispatch) params)
-      [:mod] (apply-op env (op-dispatch mod-dispatch) params)
-      [:_mat] (apply make-matrix (map (partial evaluate env) params))
-      [:_vec] (let [elems (map (partial evaluate env) params)] (assoc (apply merge elems) :_ret (map :_ret elems)))
-          ; boolean stuff TODO: implement it for matrices
-      [:equal] (apply-op env (make-type-lhs-rhs = :boolean) params)
-      [:less_than] (apply-op env (make-type-lhs-rhs < :boolean) params)
-      [:more_than] (apply-op env (make-type-lhs-rhs > :boolean) params)
-      [:less_equal] (apply-op env (make-type-lhs-rhs <= :boolean) params)
-      [:more_equal] (apply-op env (make-type-lhs-rhs >= :boolean) params)
-          ; straightforward parsing
-      [:number] (assoc env :_ret {:type :scalar :val (Integer/parseInt (second ast))})
-      [:if_statement] (apply make-if env params)
-      [:while_statement] (apply make-while env params)
-      [:varname] (assoc env :_ret (keyword (second ast)))
-      [:true] (assoc env :_ret {:type :boolean :value true})
-      [:false] (assoc env :_ret {:type :boolean :value false})
-      :else (println "syntax error: " ast))))
-
-(def prg "a = 12; b = 0; while a > 0 {a = a - 1; b = b + 2;}")
-
-(def evaluator (->> prg parser interpreter))
-;((-> prg parser (partial execute {})))
-(evaluate {} (parser prg))
-;(evaluator 1 7)
+(def prgm "{let hello = 12; let tutu = 11;}")
+(parser prgm)
+;;(run-program prgm)

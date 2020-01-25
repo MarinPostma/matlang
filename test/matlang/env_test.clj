@@ -3,6 +3,7 @@
    [clojure.test :refer :all]
    [matlang.env :refer :all]))
 
+;; TODO: update tests
 (deftest test-env-init
   (let [env (init-env {})
         env-deref @env

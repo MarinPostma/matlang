@@ -14,7 +14,7 @@
 (defn push-env-fn
   "take an env stack and return a function that push an env on top of the env stack and returns the stack"
   [env]
-  (fn [] (swap! env conj (atom {}))))
+  (fn [] (swap! env conj (atom {:_ret :none}))))
 
 (defn pop-env-fn
   "takes an env stack and return a function that pops the env stack an return the ret value of the env"
@@ -30,7 +30,7 @@
   "create env stack from initial environment"
   [init-state]
   (let [env (atom '())]
-    (swap! env conj (atom init-state))
+    (swap! env conj (atom (assoc init-state :_ret :none)))
     env))
 
 (defn get-env-val-fn
