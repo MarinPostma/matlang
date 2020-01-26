@@ -1,4 +1,9 @@
 
 let main = fn() {
-	println(12 + "Hello, World!");
+let i = 0;
+while i < 10 {
+
+	println(12 + "Hello, World!" + i);
+	i = i + 1;
+}
 };

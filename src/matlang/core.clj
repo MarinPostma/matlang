@@ -24,7 +24,7 @@
    mult = mult-div spaces <'*'> spaces factor
    div = mult-div spaces <'/'> spaces factor
    mod = mult-div spaces <'%'> spaces factor
-   <factor> = number | <'('> expr <')'> | varget | assig | mat | string
+   <factor> = number | <'('> expr <')'> | varget | assig | mat | string | expr
    mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'>
    _vec = (spaces expr <#'\\s'> spaces)* expr?
    number = float | integer
@@ -58,7 +58,8 @@
                                           ~@(map (fn [k] [:varget [:varname k]])
                                                  builtin-args)]]}}})
 (def stdlib (merge (make-builtin :print :string)
-                   (make-builtin :println :string)))
+                   (make-builtin :println :string)
+                   (make-builtin :len :matrix)))
 
 ;; define empty env
 
@@ -179,7 +180,9 @@
   (loop [predicate (exec (first args))]
     (if (= :boolean (:type predicate))
       (when (:value predicate)
+        (push-env)
         (exec (second args))
+        (pop-env)
         (recur (exec (first args))))
       (throw (Exception. (str "Expected predicate to be of type boolean, found: " (:type predicate)))))))
 
@@ -228,15 +231,36 @@
         (throw (Exception. "wrong number of arguments for " function-name)))
       (exec-fn function params))))
 
+(defn do-builtin-len
+  [args]
+  (let [item (exec (first args))]
+    (match (:type item)
+      :string {:type :integer :value (count (:value item))}
+      :else (throw (Exception. (str "Can't take lenght of " (:type item)))))))
+
+;; TODO; same logic, abstact.
+(defn do-builtin-println
+  [args]
+  (let [value (->> args first exec)]
+    (when (some #(= (:type value) %1) [:integer :float :string :boolean])
+      (->> value :value println))
+    :none))
+
+(defn do-builtin-print
+  [args]
+  (do
+    (->> args first exec :value print)
+    :none))
+
 (defn do-builtin
   [args]
   (let [builtin (first args)
         params (rest args)]
     (match builtin
-      :print (print (:value (exec (first params))))
-      :println (println (:value (exec (first params))))
-      :else (throw (Exception. (str "not a builtin: " builtin))))
-    :none))
+      :print (do-builtin-print)
+      :println (do-builtin-println params)
+      :len (do-builtin-len params)
+      :else (throw (Exception. (str "not a builtin: " builtin))))))
 
 (defn parse-string
   [args]
@@ -324,9 +348,6 @@
               (throw (Exception. "main is not a function")))
             (throw (Exception. "no main found"))))
         (throw (Exception. "Invalid program"))))))
-
-(run-program "let m = [\"hello\" \"toto\"  ]; let main = fn(){};")
-(println env)
 
 (defn -main
   [& args]
