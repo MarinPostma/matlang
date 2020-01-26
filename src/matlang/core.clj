@@ -13,7 +13,7 @@
    <expr> = assig | declare | add-sub | logical_statement | defn | fncall
    <control_flow> = if_statement | while_statement
    declare = <'let'> spaces varname (spaces <'='> spaces expr)?
-   defn = <'fn'> spaces <'('> (spaces varname spaces <','> spaces)* ( varname )? spaces <')'> spaces block
+   defn = <'fn'> spaces <'('> spaces (spaces varname spaces <','> spaces)* spaces varname? spaces <')'> spaces block
    fncall = varname <'('> (spaces expr spaces <','> spaces)* ( expr )? spaces <')'>
    assig = spaces varname spaces <'='> spaces expr
    <add-sub> = mult-div | add | sub
@@ -32,7 +32,7 @@
    integer = #'-?[0-9]+'
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
-   block = <'{'>(spaces form spaces)*<'}'>
+   block = <'{'> (spaces form spaces)* <'}'>
    if_statement = <#'if '> spaces logical_statement spaces block (spaces <#'else'> spaces block)?
    while_statement = <#'while '> spaces logical_statement spaces block
    <boolean> = true | false
@@ -49,8 +49,20 @@
 
 (declare exec exec-block)
 
+(defmacro make-builtin
+  [builtin-name & builtin-args]
+  `{~builtin-name {:type :function
+                   :value {:params '(~@builtin-args)
+                           :body [:block [:builtin ~builtin-name
+                                          ~@(map (fn [k] [:varget [:varname k]])
+                                                 builtin-args)]]}}})
+(def stdlib (merge (make-builtin :print :string)
+                   (make-builtin :println :string)))
+
 ;; define empty env
-(def env (init-env {}))
+
+
+(def env (init-env (merge {} stdlib)))
 
 ;; generate functions to manipulate env  all functions to manipulate env are now in scope :
 ;; push-env
@@ -132,7 +144,6 @@
   (let [predicate (exec (first args))
         true-branch (second args)
         false-branch (nth args 2 nil)]
-    (println false-branch)
     (if (= :boolean (:type predicate))
       (do
         (if (:value predicate)
@@ -187,7 +198,6 @@
 (defn exec-fn
   [function params]
   (do
-    (println function)
     ;; push new env
     (push-env)
         ;; setup function environement
@@ -212,12 +222,23 @@
         (throw (Exception. "wrong number of arguments for " function-name)))
       (exec-fn function params))))
 
+(defn do-builtin
+  [args]
+  (let [builtin (first args)
+        params (rest args)]
+    (match builtin
+      :print (print (:value (exec (first params))))
+      :println (println (:value (exec (first params))))
+      :else (throw (Exception. (str "not a builtin: " builtin))))
+    :none))
+
 (defn exec
   [inst]
   (let [tok-type (first inst)
         args (rest inst)]
     (do
       (match tok-type
+        :builtin (set-env-value :_ret (do-builtin args))
         :defn (set-env-value :_ret (do-defn args))
         :fncall (set-env-value :_ret (do-fncall args))
         :block (set-env-value :_ret (do (push-env) (exec-block args) (pop-env)))
@@ -244,7 +265,7 @@
   (loop [cur-inst (first block)
          remaining (rest block)]
     (do
-      (exec cur-inst)
+      (if cur-inst (exec cur-inst))
       (if (> (count remaining) 0)
         (recur (first remaining) (rest remaining))))))
 
@@ -261,10 +282,11 @@
           (if (= (:type main) :function)
             (exec-fn (:value main) [])
             (throw (Exception. "main is not a function")))
-          (throw (Exception. "no main found")))
-        (println env))
+          (throw (Exception. "no main found"))))
       (throw (Exception. "Invalid program")))))
 
-(def prgm "let hello = 0; let main = fn() {hello = hello + 1;};")
-;(def prgm "let machin =   1231; machin = 0;")
-(run-program prgm)
+(defn -main
+  [& args]
+  (run-program (slurp (first args))))
+
+
