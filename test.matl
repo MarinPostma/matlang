@@ -1,0 +1,4 @@
+
+let main = fn() {
+	println(12 + "Hello, World!");
+};

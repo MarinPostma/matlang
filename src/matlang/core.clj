@@ -1,5 +1,6 @@
 (ns matlang.core
   (:require [instaparse.core :as insta]
+            [instaparse.failure :as fail]
             [rhizome.viz]
             [matlang.env :refer [make-env-fn init-env]]
             [clojure.core.match :refer [match]])
@@ -23,12 +24,11 @@
    mult = mult-div spaces <'*'> spaces factor
    div = mult-div spaces <'/'> spaces factor
    mod = mult-div spaces <'%'> spaces factor
-   <factor> = number | <'('> expr <')'> | varget | assig | mat
-   <mat> = _mat
-   _mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'>
-   _vec = (spaces number <#'\\s'> spaces)* (number)?
+   <factor> = number | <'('> expr <')'> | varget | assig | mat | string
+   mat = <'['> spaces (_vec spaces <';'>)* spaces _vec? spaces  <']'>
+   _vec = (spaces expr <#'\\s'> spaces)* expr?
    number = float | integer
-   float = #'-?[0-9]+.[0-9]+'
+   float = #'-?[0-9]+\\.[0-9]+'
    integer = #'-?[0-9]+'
    varget = varname | argument
    varname = #'[a-zA-Z]\\w*'
@@ -44,6 +44,7 @@
     more_equal = expr spaces <'>='> spaces expr
    true = <#'true'>
    false = <#'false'>
+   string = <'\"'> #'[^\"]*' <'\"'>
    <spaces> = <#'\\s*'>
    argument = <'%'>#'[0-9]+'"))
 
@@ -96,6 +97,11 @@
       [:float :integer] {:type :float :value (+ (:value lhs) (:value rhs))}
       [:integer :float] {:type :float :value (+ (:value lhs) (:value rhs))}
       [:float :float] {:type :float :value (+ (:value lhs) (:value rhs))}
+      [:string :string] {:type :string :value (str (:value lhs) (:value rhs))}
+      [:string :float] {:type :string :value (str (:value lhs) (:value rhs))}
+      [:string :integer] {:type :string :value (str (:value lhs) (:value rhs))}
+      [:float :string] {:type :string :value (str (:value lhs) (:value rhs))}
+      [:integer :string] {:type :string :value (str (:value lhs) (:value rhs))}
       :else (throw (Exception. (str "Unsuported add with types " (:type lhs) " and " (:type rhs)))))))
 
 (defn do-sub
@@ -232,12 +238,43 @@
       :else (throw (Exception. (str "not a builtin: " builtin))))
     :none))
 
+(defn parse-string
+  [args]
+  {:type :string
+   :value (first args)})
+
+(defn make-vec
+  [args]
+  (let  [values (map exec args)]
+    {:type :vector
+     :value {:size (count values)
+             :type (:type (first values))
+             :values (if (every? #(= (:type %1) (:type (first values))) values)
+                       (vec values)
+                       (throw (Exception. "All elements in a matrix must have the same type")))}}))
+
+(defn make-mat
+  [args]
+  (let [values (map exec args)]
+    (if (and (every? #(= (:type %1) :vector) values)
+             (every? #(= (:type (:value %1)) (:type (:value (first values)))) values))
+      (if (every? #(= (:size (:value %1)) (:size (:value (first values)))) values)
+        {:type :matrix
+         :value {:size (list (count values) (:size (:value (first values))))
+                 :type (:type (:value (first values)))
+                 :values (vec (apply concat (map #(:values (:value %1)) values)))}}
+
+        (throw (Exception. "All rows in a matrix must have the same size.")))
+      (throw (Exception. "All elements in a matrix must have the same type")))))
+
 (defn exec
   [inst]
   (let [tok-type (first inst)
         args (rest inst)]
     (do
       (match tok-type
+        :_vec (set-env-value :_ret (make-vec args))
+        :mat (set-env-value :_ret (make-mat args))
         :builtin (set-env-value :_ret (do-builtin args))
         :defn (set-env-value :_ret (do-defn args))
         :fncall (set-env-value :_ret (do-fncall args))
@@ -254,6 +291,7 @@
         :div (set-env-value :_ret  (do-div args))
         :mod (set-env-value :_ret  (do-mod args))
         :less_than (set-env-value :_ret (do-less-than args))
+        :string (set-env-value :_ret (parse-string args))
         :number (set-env-value :_ret  (parse-num args))
         :true (set-env-value :_ret  {:type :boolean :value true})
         :false (set-env-value :_ret  {:type :boolean :value false})
@@ -273,17 +311,22 @@
   "runs a program string"
   [program]
   (let [ast (parser program)]
-    (if (= (first ast) :prog)
-      (do
+    (if (not (instance? clojure.lang.PersistentVector ast))
+      (println ast)
+      (if (= (first ast) :prog)
+        (do
         ;; parse the program, exec global scope
-        (exec-block (rest ast))
+          (exec-block (rest ast))
         ;; run main
-        (if-let [main (get-env-value :main)]
-          (if (= (:type main) :function)
-            (exec-fn (:value main) [])
-            (throw (Exception. "main is not a function")))
-          (throw (Exception. "no main found"))))
-      (throw (Exception. "Invalid program")))))
+          (if-let [main (get-env-value :main)]
+            (if (= (:type main) :function)
+              (exec-fn (:value main) [])
+              (throw (Exception. "main is not a function")))
+            (throw (Exception. "no main found"))))
+        (throw (Exception. "Invalid program"))))))
+
+(run-program "let m = [\"hello\" \"toto\"  ]; let main = fn(){};")
+(println env)
 
 (defn -main
   [& args]
