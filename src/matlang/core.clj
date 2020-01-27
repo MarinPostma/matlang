@@ -40,6 +40,7 @@
     more_than = expr spaces <'>'> spaces expr
     less_than = expr spaces <'<'> spaces expr
     equal = expr spaces <'=='> spaces expr
+    not_equal = expr spaces <'!='> spaces expr
     less_equal = expr spaces <'<='> spaces expr
     more_equal = expr spaces <'>='> spaces expr
    true = <#'true'>
@@ -186,16 +187,24 @@
         (recur (exec (first args))))
       (throw (Exception. (str "Expected predicate to be of type boolean, found: " (:type predicate)))))))
 
-(defn do-less-than
-  [args]
-  (let [lhs (exec (first args))
-        rhs (exec (second args))]
-    (match [(:type lhs) (:type rhs)]
-      [:integer :integer] {:type :boolean :value (< (:value lhs) (:value rhs))}
-      [:float :integer] {:type :boolean :value (< (:value lhs) (:value rhs))}
-      [:integer :float] {:type :boolean :value (< (:value lhs) (:value rhs))}
-      [:float :float] {:type :boolean :value (< (:value lhs) (:value rhs))}
-      :else (throw (Exception. (str "Unsuported LT with types " (:type lhs) " and " (:type rhs)))))))
+(defn make-bool-fn
+  [op]
+  (fn [args]
+    (let [lhs (exec (first args))
+          rhs (exec (second args))]
+      (match [(:type lhs) (:type rhs)]
+        [:integer :integer] {:type :boolean :value (op (:value lhs) (:value rhs))}
+        [:float :integer] {:type :boolean :value (op (:value lhs) (:value rhs))}
+        [:integer :float] {:type :boolean :value (op (:value lhs) (:value rhs))}
+        [:float :float] {:type :boolean :value (op (:value lhs) (:value rhs))}
+        :else (throw (Exception. (str "Unsuported LT with types " (:type lhs) " and " (:type rhs))))))))
+
+(def do-less-than (make-bool-fn <))
+(def do-equal (make-bool-fn =))
+(def do-leq (make-bool-fn <=))
+(def do-more-than (make-bool-fn >))
+(def do-geq (make-bool-fn >=))
+(def do-neq (make-bool-fn not=))
 
 (defn do-defn
   [args]
@@ -305,6 +314,12 @@
         :block (set-env-value :_ret (do (push-env) (exec-block args) (pop-env)))
         :varget (set-env-value :_ret (get-env-value (exec (first args))))
         :assig (set-env-value :_ret (do-assig args))
+        :more_than (set-env-value :_ret (do-more-than args))
+        :less_than (set-env-value :_ret (do-less-than args))
+        :equal (set-env-value :_ret (do-equal args))
+        :not_equal (set-env-value :_ret (do-neq args))
+        :less_equa (set-env-value :_ret (do-leq args))
+        :more_equa (set-env-value :_ret (do-geq args))
         :varname (set-env-value :_ret  (keyword (first args)))
         :declare (set-env-value :_ret  (do-declare args))
         :while_statement (set-env-value :_ret (do-while args))
@@ -314,7 +329,6 @@
         :mult (set-env-value :_ret  (do-mult args))
         :div (set-env-value :_ret  (do-div args))
         :mod (set-env-value :_ret  (do-mod args))
-        :less_than (set-env-value :_ret (do-less-than args))
         :string (set-env-value :_ret (parse-string args))
         :number (set-env-value :_ret  (parse-num args))
         :true (set-env-value :_ret  {:type :boolean :value true})
