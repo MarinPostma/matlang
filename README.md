@@ -1,6 +1,6 @@
 # matlang
 
-a toy programming language for linear algebra
+a toy programming language with matrices in mind
 
 ## guide
 
@@ -55,7 +55,8 @@ while true {
 ## Roadmap
 [x] if-else
 [x] while
-[ ] functions (first order)
-[ ] strings
+[x] functions (first order)
+[x] strings
 [ ] sys-calls (write, read, open)
-[ ] mini stdlib
+[ ] matrices operation (product, concat, addition... )
+[ ] partial parsing and REPL
